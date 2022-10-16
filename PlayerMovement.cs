@@ -1,6 +1,5 @@
 using System;
 using UnityEngine;
-using UnityEngine.UI;
 
 public class PlayerMovement : MonoBehaviour {
 
@@ -21,7 +20,6 @@ public class PlayerMovement : MonoBehaviour {
     public float maxSpeed = 20;
     public bool grounded;
     public LayerMask whatIsGround;
-    public Slider SpeedSlider;
     
     public float counterMovement = 0.175f;
     private float threshold = 0.01f;
@@ -37,7 +35,6 @@ public class PlayerMovement : MonoBehaviour {
     private bool readyToJump = true;
     private float jumpCooldown = 0.25f;
     public float jumpForce = 550f;
-    public Slider JumpSlider;
     
     //Input
     float x, y;
@@ -65,9 +62,6 @@ public class PlayerMovement : MonoBehaviour {
     private void Update() {
         MyInput();
         Look();
-
-        jumpForce = JumpSlider.value;
-        maxSpeed = SpeedSlider.value;
     }
 
     /// <summary>
