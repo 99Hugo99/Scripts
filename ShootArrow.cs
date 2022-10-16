@@ -2,13 +2,13 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class ShootArrow : MonoBehaviour
+public class Shoot : MonoBehaviour
 {
-    public GameObject Arrow;
+    public GameObject Bullet;
     public float fireRate, nextFire;
     public float ShootForce;
-    public Transform Bow;
-    public ParticleSystem Effect;
+    public Transform GunTip;
+    public ParticleSystem MuzzleFlash;
 
     void Update()
     {
@@ -17,16 +17,15 @@ public class ShootArrow : MonoBehaviour
             if(Time.time >= nextFire)
             {
                 nextFire = Time.time +1f / fireRate;
-                Shoot();
+                ShootBullet();
             }
         }
     }
 
-    void Shoot ()
+    void ShootBullet ()
     {
-        FindObjectOfType<AudioManager>().Play("ShootArrow");
-        Effect.Play();
-        GameObject clone = Instantiate(Arrow,Bow.position,transform.rotation * Quaternion.Euler (90, 90, 90));
+        MuzzleFlash.Play();
+        GameObject clone = Instantiate(Bullet,GunTip.position,transform.rotation * Quaternion.Euler (90, 90, 90));
         clone.GetComponent<Rigidbody>().AddForce(transform.forward * ShootForce);
         Destroy(clone, 10);
     }
