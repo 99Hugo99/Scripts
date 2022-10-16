@@ -79,21 +79,6 @@ public class PlayerMovement : MonoBehaviour {
         jumping = Input.GetButton("Jump");
     }
 
-    private void StartCrouch() {
-        transform.localScale = crouchScale;
-        transform.position = new Vector3(transform.position.x, transform.position.y - 0.5f, transform.position.z);
-        if (rb.velocity.magnitude > 0.5f) {
-            if (grounded) {
-                rb.AddForce(orientation.transform.forward * slideForce);
-            }
-        }
-    }
-
-    private void StopCrouch() {
-        transform.localScale = playerScale;
-        transform.position = new Vector3(transform.position.x, transform.position.y + 0.5f, transform.position.z);
-    }
-
     private void Movement() {
         //Extra gravity
         rb.AddForce(Vector3.down * Time.deltaTime * 10);
