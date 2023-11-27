@@ -6,6 +6,8 @@ public class PlayerMovement : MonoBehaviour {
     //Assingables
     public Transform playerCam;
     public Transform orientation;
+    public CapsuleCollider colliderTall;
+    public CapsuleCollider colliderShort;
     
     //Other
     private Rigidbody rb;
@@ -26,8 +28,6 @@ public class PlayerMovement : MonoBehaviour {
     public float maxSlopeAngle = 35f;
 
     //Crouch & Slide
-    private Vector3 crouchScale = new Vector3(1, 0.5f, 1);
-    private Vector3 playerScale;
     public float slideForce = 400;
     public float slideCounterMovement = 0.2f;
 
@@ -49,7 +49,6 @@ public class PlayerMovement : MonoBehaviour {
     }
     
     void Start() {
-        playerScale =  transform.localScale;
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
     }
@@ -81,7 +80,8 @@ public class PlayerMovement : MonoBehaviour {
     }
 
     private void StartCrouch() {
-        transform.localScale = crouchScale;
+        colliderShort.height -= 1f;
+        colliderTall.height -= 1f;
         transform.position = new Vector3(transform.position.x, transform.position.y - 0.5f, transform.position.z);
         if (rb.velocity.magnitude > 0.5f) {
             if (grounded) {
@@ -91,7 +91,8 @@ public class PlayerMovement : MonoBehaviour {
     }
 
     private void StopCrouch() {
-        transform.localScale = playerScale;
+        colliderShort.height += 1f;
+        colliderTall.height += 1f;
         transform.position = new Vector3(transform.position.x, transform.position.y + 0.5f, transform.position.z);
     }
 
