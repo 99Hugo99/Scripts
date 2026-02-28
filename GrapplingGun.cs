@@ -1,90 +1,188 @@
 using UnityEngine;
-using UnityEngine.UI;
 
-public class GrapplingGun : MonoBehaviour {
-
+public class GrapplingGun : MonoBehaviour
+{
     private LineRenderer lr;
     private Vector3 grapplePoint;
     public LayerMask whatIsGrappleable;
-    public Transform gunTip, camera, player;
+    public Transform gunTip, PlayerCamera, player;
+    public GameObject Hook;
     public float maxDistance = 1000f;
     private SpringJoint joint;
-    public Slider WebDistanceSlider;
 
-    void Awake() {
+    [Header("Rope Settings")]
+    public float ropeExtendSpeed = 60f;
+    public float ropeRetractSpeed = 70f;
+    public float distanceSpeedScale = 0.5f;
+    public float wobbleAmplitude = 0.4f;
+    public float wobbleFrequency = 3f;
+    public float wobbleDuration = 0.8f;
+    public float distanceWobbleScale = 0.02f;
+    public int ropeSegments = 20;
+
+    [Header("Hit Object Spawn")]
+    public GameObject objectToSpawnAtHit;
+
+    private Vector3 currentGrapplePosition;
+    private float wobbleTimer = 0f;
+    private bool isExtending = false;
+    private bool isRetracting = false;
+    private GameObject spawnedHitObject;
+    private bool hitObjectSpawned = false;
+    private float scaledExtendSpeed;
+    private float scaledRetractSpeed;
+    private float scaledWobbleDuration;
+    private RaycastHit pendingHit;
+    private bool hasPendingHit = false;
+
+    void Awake()
+    {
         lr = GetComponent<LineRenderer>();
     }
 
-    void Update() {
-        if (Input.GetMouseButtonDown(2)) {
+    void Update()
+    {
+        if (Input.GetMouseButtonDown(0))
+        {
             StartGrapple();
         }
-        else if (Input.GetMouseButtonUp(2)) {
+        else if (Input.GetMouseButtonUp(0))
+        {
             StopGrapple();
         }
-
-        maxDistance = WebDistanceSlider.value;
     }
 
-    //Called after Update
-    void LateUpdate() {
+    void LateUpdate()
+    {
         DrawRope();
     }
 
-    /// <summary>
-    /// Call whenever we want to start a grapple
-    /// </summary>
-    void StartGrapple() {
+    void StartGrapple()
+    {
         RaycastHit hit;
-        if (Physics.Raycast(camera.position, camera.forward, out hit, maxDistance, whatIsGrappleable)) {
+        if (Physics.Raycast(PlayerCamera.position, PlayerCamera.forward, out hit, maxDistance, whatIsGrappleable))
+        {
+            Hook.SetActive(false);
             grapplePoint = hit.point;
-            joint = player.gameObject.AddComponent<SpringJoint>();
-            joint.autoConfigureConnectedAnchor = false;
-            joint.connectedAnchor = grapplePoint;
+            pendingHit = hit;
+            hasPendingHit = true;
 
-            float distanceFromPoint = Vector3.Distance(player.position, grapplePoint);
+            float distance = Vector3.Distance(gunTip.position, grapplePoint);
+            scaledExtendSpeed = ropeExtendSpeed + distance * distanceSpeedScale;
+            scaledRetractSpeed = ropeRetractSpeed + distance * distanceSpeedScale;
+            scaledWobbleDuration = wobbleDuration + distance * distanceWobbleScale;
 
-            //The distance grapple will try to keep from grapple point. 
-            joint.maxDistance = distanceFromPoint * 0.8f;
-            joint.minDistance = distanceFromPoint * 0.25f;
-
-            //Adjust these values to fit your game.
-            joint.spring = 4.5f;
-            joint.damper = 7f;
-            joint.massScale = 4.5f;
-
-            lr.positionCount = 2;
+            lr.positionCount = ropeSegments;
             currentGrapplePosition = gunTip.position;
+            isExtending = true;
+            isRetracting = false;
+            hitObjectSpawned = false;
+            wobbleTimer = scaledWobbleDuration;
+
             FindObjectOfType<AudioManager>().Play("Grapple");
         }
     }
 
+    void AttachGrapple()
+    {
+        joint = player.gameObject.AddComponent<SpringJoint>();
+        joint.autoConfigureConnectedAnchor = false;
+        joint.connectedAnchor = grapplePoint;
 
-    /// <summary>
-    /// Call whenever we want to stop a grapple
-    /// </summary>
-    void StopGrapple() {
-        lr.positionCount = 0;
+        float distanceFromPoint = Vector3.Distance(player.position, grapplePoint);
+        joint.maxDistance = distanceFromPoint * 0.8f;
+        joint.minDistance = distanceFromPoint * 0.25f;
+        joint.spring = 4.5f;
+        joint.damper = 7f;
+        joint.massScale = 4.5f;
+
+        if (objectToSpawnAtHit != null && !hitObjectSpawned)
+        {
+            if (spawnedHitObject != null) Destroy(spawnedHitObject);
+            Quaternion spawnRotation = Quaternion.LookRotation(PlayerCamera.forward);
+            spawnedHitObject = Instantiate(objectToSpawnAtHit, grapplePoint, spawnRotation);
+            hitObjectSpawned = true;
+        }
+
+        hasPendingHit = false;
+    }
+
+    void StopGrapple()
+    {
         Destroy(joint);
+        isExtending = false;
+        isRetracting = true;
+        hasPendingHit = false;
+        wobbleTimer = scaledWobbleDuration;
+
+        if (spawnedHitObject != null)
+        {
+            Destroy(spawnedHitObject);
+            spawnedHitObject = null;
+        }
+
+        hitObjectSpawned = false;
     }
 
-    private Vector3 currentGrapplePosition;
-    
-    void DrawRope() {
-        //If not grappling, don't draw rope
-        if (!joint) return;
+    void DrawRope()
+    {
+        if (isRetracting)
+        {
+            currentGrapplePosition = Vector3.MoveTowards(currentGrapplePosition, gunTip.position, scaledRetractSpeed * Time.deltaTime);
 
-        currentGrapplePosition = Vector3.Lerp(currentGrapplePosition, grapplePoint, Time.deltaTime * 8f);
-        
-        lr.SetPosition(0, gunTip.position);
-        lr.SetPosition(1, currentGrapplePosition);
+            if (Vector3.Distance(currentGrapplePosition, gunTip.position) < 0.01f)
+            {
+                isRetracting = false;
+                lr.positionCount = 0;
+                Hook.SetActive(true);
+                return;
+            }
+        }
+
+        if (!isRetracting && !isExtending && joint == null) return;
+
+        if (isExtending)
+        {
+            currentGrapplePosition = Vector3.MoveTowards(currentGrapplePosition, grapplePoint, scaledExtendSpeed * Time.deltaTime);
+
+            if (Vector3.Distance(currentGrapplePosition, grapplePoint) < 0.01f)
+            {
+                isExtending = false;
+                // Only now attach the joint and spawn the object
+                if (hasPendingHit) AttachGrapple();
+            }
+        }
+
+        Vector3 ropeDir = (currentGrapplePosition - gunTip.position).normalized;
+        Vector3 perp = Vector3.Cross(ropeDir, Vector3.up);
+        if (perp.sqrMagnitude < 0.001f)
+            perp = Vector3.Cross(ropeDir, Vector3.right);
+        perp.Normalize();
+
+        float wobbleFade = wobbleTimer > 0f ? wobbleTimer / scaledWobbleDuration : 0f;
+        if (wobbleTimer > 0f) wobbleTimer -= Time.deltaTime;
+
+        for (int i = 0; i < ropeSegments; i++)
+        {
+            float t = i / (float)(ropeSegments - 1);
+            Vector3 basePos = Vector3.Lerp(gunTip.position, currentGrapplePosition, t);
+
+            float wave = Mathf.Sin(t * wobbleFrequency * Mathf.PI + Time.time * 8f)
+                         * wobbleAmplitude
+                         * wobbleFade
+                         * (t * (1f - t) * 4f);
+
+            lr.SetPosition(i, basePos + perp * wave);
+        }
     }
 
-    public bool IsGrappling() {
+    public bool IsGrappling()
+    {
         return joint != null;
     }
 
-    public Vector3 GetGrapplePoint() {
+    public Vector3 GetGrapplePoint()
+    {
         return grapplePoint;
     }
 }
