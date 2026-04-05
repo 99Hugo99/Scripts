@@ -14,9 +14,9 @@ public class GrapplingGun : MonoBehaviour
     public float ropeExtendSpeed = 60f;
     public float ropeRetractSpeed = 70f;
     public float distanceSpeedScale = 0.5f;
-    public float wobbleAmplitude = 0.4f;
+    public float wobbleAmplitude = 0.2f;
     public float wobbleFrequency = 3f;
-    public float wobbleDuration = 0.8f;
+    public float wobbleDuration = 0.6f;
     public float distanceWobbleScale = 0.02f;
     public int ropeSegments = 20;
 
@@ -28,7 +28,6 @@ public class GrapplingGun : MonoBehaviour
     private bool isExtending = false;
     private bool isRetracting = false;
     private GameObject spawnedHitObject;
-    private bool hitObjectSpawned = false;
     private float scaledExtendSpeed;
     private float scaledRetractSpeed;
     private float scaledWobbleDuration;
@@ -38,23 +37,30 @@ public class GrapplingGun : MonoBehaviour
     void Awake()
     {
         lr = GetComponent<LineRenderer>();
+        lr.positionCount = 0;
     }
 
     void Update()
     {
-        if (Input.GetMouseButtonDown(0))
-        {
+        if (Input.GetMouseButtonDown(2))
             StartGrapple();
-        }
-        else if (Input.GetMouseButtonUp(0))
-        {
+        else if (Input.GetMouseButtonUp(2))
             StopGrapple();
-        }
     }
 
     void LateUpdate()
     {
         DrawRope();
+
+        // CHANGED: Update hook position every frame to follow rope end
+        if (spawnedHitObject != null && (isExtending || isRetracting || joint != null))
+        {
+            Vector3 moveDir = (currentGrapplePosition - gunTip.position).normalized;
+            if (moveDir != Vector3.zero)
+                spawnedHitObject.transform.rotation = Quaternion.LookRotation(moveDir);
+
+            spawnedHitObject.transform.position = currentGrapplePosition;
+        }
     }
 
     void StartGrapple()
@@ -76,10 +82,23 @@ public class GrapplingGun : MonoBehaviour
             currentGrapplePosition = gunTip.position;
             isExtending = true;
             isRetracting = false;
-            hitObjectSpawned = false;
             wobbleTimer = scaledWobbleDuration;
 
+            // CHANGED: Spawn hook immediately at gun tip so it travels with the rope
+            if (spawnedHitObject != null) Destroy(spawnedHitObject);
+            if (objectToSpawnAtHit != null)
+            {
+                spawnedHitObject = Instantiate(objectToSpawnAtHit, gunTip.position, Quaternion.LookRotation(PlayerCamera.forward));
+            }
+
             FindObjectOfType<AudioManager>().Play("Grapple");
+        }
+        else
+        {
+            lr.positionCount = 0;
+            isExtending = false;
+            isRetracting = false;
+            hasPendingHit = false;
         }
     }
 
@@ -96,13 +115,9 @@ public class GrapplingGun : MonoBehaviour
         joint.damper = 7f;
         joint.massScale = 4.5f;
 
-        if (objectToSpawnAtHit != null && !hitObjectSpawned)
-        {
-            if (spawnedHitObject != null) Destroy(spawnedHitObject);
-            Quaternion spawnRotation = Quaternion.LookRotation(PlayerCamera.forward);
-            spawnedHitObject = Instantiate(objectToSpawnAtHit, grapplePoint, spawnRotation);
-            hitObjectSpawned = true;
-        }
+        // CHANGED: Hook is already spawned, just snap it to the exact grapple point
+        if (spawnedHitObject != null)
+            spawnedHitObject.transform.position = grapplePoint;
 
         hasPendingHit = false;
     }
@@ -114,14 +129,6 @@ public class GrapplingGun : MonoBehaviour
         isRetracting = true;
         hasPendingHit = false;
         wobbleTimer = scaledWobbleDuration;
-
-        if (spawnedHitObject != null)
-        {
-            Destroy(spawnedHitObject);
-            spawnedHitObject = null;
-        }
-
-        hitObjectSpawned = false;
     }
 
     void DrawRope()
@@ -135,6 +142,13 @@ public class GrapplingGun : MonoBehaviour
                 isRetracting = false;
                 lr.positionCount = 0;
                 Hook.SetActive(true);
+
+                // CHANGED: Destroy hook object when fully retracted
+                if (spawnedHitObject != null)
+                {
+                    Destroy(spawnedHitObject);
+                    spawnedHitObject = null;
+                }
                 return;
             }
         }
@@ -148,10 +162,11 @@ public class GrapplingGun : MonoBehaviour
             if (Vector3.Distance(currentGrapplePosition, grapplePoint) < 0.01f)
             {
                 isExtending = false;
-                // Only now attach the joint and spawn the object
                 if (hasPendingHit) AttachGrapple();
             }
         }
+
+        if (lr.positionCount < 2) return;
 
         Vector3 ropeDir = (currentGrapplePosition - gunTip.position).normalized;
         Vector3 perp = Vector3.Cross(ropeDir, Vector3.up);
@@ -162,9 +177,9 @@ public class GrapplingGun : MonoBehaviour
         float wobbleFade = wobbleTimer > 0f ? wobbleTimer / scaledWobbleDuration : 0f;
         if (wobbleTimer > 0f) wobbleTimer -= Time.deltaTime;
 
-        for (int i = 0; i < ropeSegments; i++)
+        for (int i = 0; i < lr.positionCount; i++)
         {
-            float t = i / (float)(ropeSegments - 1);
+            float t = i / (float)(lr.positionCount - 1);
             Vector3 basePos = Vector3.Lerp(gunTip.position, currentGrapplePosition, t);
 
             float wave = Mathf.Sin(t * wobbleFrequency * Mathf.PI + Time.time * 8f)
